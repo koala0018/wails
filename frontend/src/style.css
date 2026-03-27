@@ -1,0 +1,36 @@
+html {
+    min-height: 100%;
+    background:
+        radial-gradient(circle at top left, rgba(255, 173, 73, 0.24), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(64, 153, 255, 0.16), transparent 28%),
+        linear-gradient(160deg, #07101e 0%, #10213a 45%, #09111d 100%);
+    color: white;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    color: white;
+    font-family: "Nunito", "Segoe UI", sans-serif;
+}
+
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    src: local(""),
+    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+}
+
+#app {
+    min-height: 100vh;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+button,
+input {
+    font: inherit;
+}
