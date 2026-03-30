@@ -1,131 +1,235 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
-import { Greet } from "../wailsjs/go/main/App";
+import {
+    GetEnvironmentStatus,
+    SelectOutputDirectory,
+    SelectVideoFile,
+    SplitVideo,
+} from "../wailsjs/go/main/App";
 
-const featureCards = [
-    {
-        title: "React + Wails",
-        text: "前端页面和桌面壳已经联通，现在就可以继续搭业务界面。",
-    },
-    {
-        title: "Go Backend Ready",
-        text: "Go、Wails CLI 和桌面运行时都已经安装完成，后端方法可直接暴露给前端。",
-    },
-    {
-        title: "Build Verified",
-        text: "当前项目已经完成过真实构建验证，打开后就能直接看到效果。",
-    },
-];
-
-const quickSteps = [
-    "运行 wails dev 进入桌面开发模式",
-    "在 frontend/src 下继续拆分页面和组件",
-    "在 Go 中添加业务方法并通过 Wails 暴露给前端",
-];
+const initialForm = {
+    inputPath: "",
+    outputDir: "",
+    segmentLengthSec: 30,
+};
 
 function App() {
-    const [name, setName] = useState("");
-    const [resultText, setResultText] = useState("输入你的名字，然后点按钮测试 Go 后端调用。");
-    const [isLoading, setIsLoading] = useState(false);
+    const [form, setForm] = useState(initialForm);
+    const [environment, setEnvironment] = useState({
+        ffmpegReady: false,
+        ffmpegPath: "",
+        message: "正在检查 ffmpeg 环境...",
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorMessage, setErrorMessage] = useState("");
+    const [result, setResult] = useState(null);
 
-    const greetingName = useMemo(() => name.trim() || "Developer", [name]);
+    useEffect(() => {
+        async function loadEnvironment() {
+            try {
+                const status = await GetEnvironmentStatus();
+                setEnvironment(status);
+            } catch (error) {
+                setEnvironment({
+                    ffmpegReady: false,
+                    ffmpegPath: "",
+                    message: `环境检查失败：${String(error)}`,
+                });
+            }
+        }
 
-    async function handleGreet() {
-        setIsLoading(true);
+        loadEnvironment();
+    }, []);
+
+    async function handleSelectVideo() {
+        const selection = await SelectVideoFile();
+        if (!selection?.path) {
+            return;
+        }
+
+        setForm((current) => ({
+            ...current,
+            inputPath: selection.path,
+        }));
+        setErrorMessage("");
+    }
+
+    async function handleSelectOutputDir() {
+        const selection = await SelectOutputDirectory();
+        if (!selection?.path) {
+            return;
+        }
+
+        setForm((current) => ({
+            ...current,
+            outputDir: selection.path,
+        }));
+        setErrorMessage("");
+    }
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setErrorMessage("");
+        setResult(null);
+
         try {
-            const result = await Greet(greetingName);
-            setResultText(result);
+            const response = await SplitVideo({
+                inputPath: form.inputPath.trim(),
+                outputDir: form.outputDir.trim(),
+                segmentLengthSec: Number(form.segmentLengthSec),
+            });
+            setResult(response);
+        } catch (error) {
+            setErrorMessage(String(error));
         } finally {
-            setIsLoading(false);
+            setIsSubmitting(false);
         }
     }
 
     return (
-        <main className="app-shell">
-            <section className="hero-card">
+        <main className="page-shell">
+            <section className="hero">
                 <div className="hero-copy">
-                    <span className="eyebrow">Desktop Starter</span>
-                    <h1>你的桌面应用首页已经准备好了。</h1>
+                    <div className="eyebrow">Desktop Video Splitter</div>
+                    <h1>上传需要切割的视频</h1>
                     <p className="hero-text">
-                        这不是默认模板页，而是一个适合作为开发起点的桌面应用首页。
-                        启动应用后，你会立刻看到状态概览、开发建议，以及一个可直接验证
-                        Go 后端联通的交互区。
+                        这是一个本地桌面工具，直接调用 ffmpeg 处理视频，不走云端。
+                        你只需要选择源视频、设置每段秒数、指定保存目录，然后点击开始切割。
                     </p>
 
-                    <div className="hero-actions">
-                        <button className="primary-btn" onClick={handleGreet} disabled={isLoading}>
-                            {isLoading ? "连接中..." : "测试 Go 调用"}
-                        </button>
-                        <div className="status-pill">
-                            <span className="status-dot" />
-                            桌面应用已可直接预览
-                        </div>
+                    <div className="status-grid">
+                        <article className={`status-card ${environment.ffmpegReady ? "ready" : "warning"}`}>
+                            <span className="status-label">ffmpeg 环境</span>
+                            <strong>{environment.ffmpegReady ? "已就绪" : "未就绪"}</strong>
+                            <p>{environment.message}</p>
+                        </article>
+
+                        <article className="status-card">
+                            <span className="status-label">切割方式</span>
+                            <strong>自动分段导出</strong>
+                            <p>输出为 MP4，按设定秒数连续生成多个短视频文件。</p>
+                        </article>
                     </div>
                 </div>
 
-                <div className="preview-panel">
-                    <div className="window-bar">
-                        <span />
-                        <span />
-                        <span />
+                <form className="tool-card" onSubmit={handleSubmit}>
+                    <div className="section-heading">
+                        <span>操作面板</span>
+                        <strong>视频切割设置</strong>
                     </div>
-                    <div className="preview-content">
-                        <div className="preview-label">实时联调面板</div>
-                        <div className="preview-result">{resultText}</div>
-                        <label className="field-label" htmlFor="name">
-                            你的名字
-                        </label>
-                        <input
-                            id="name"
-                            className="name-input"
-                            value={name}
-                            onChange={(event) => setName(event.target.value)}
-                            autoComplete="off"
-                            placeholder="例如：Zhuan"
-                        />
-                        <div className="hint-text">
-                            这里会调用 Go 中的 <code>Greet()</code> 方法返回结果。
+
+                    <label className="field-block">
+                        <span>源视频</span>
+                        <div className="path-row">
+                            <input
+                                value={form.inputPath}
+                                onChange={(event) =>
+                                    setForm((current) => ({
+                                        ...current,
+                                        inputPath: event.target.value,
+                                    }))
+                                }
+                                placeholder="选择或粘贴视频文件路径"
+                            />
+                            <button type="button" className="secondary-btn" onClick={handleSelectVideo}>
+                                选择视频
+                            </button>
                         </div>
+                    </label>
+
+                    <label className="field-block">
+                        <span>输出目录</span>
+                        <div className="path-row">
+                            <input
+                                value={form.outputDir}
+                                onChange={(event) =>
+                                    setForm((current) => ({
+                                        ...current,
+                                        outputDir: event.target.value,
+                                    }))
+                                }
+                                placeholder="选择短视频保存位置"
+                            />
+                            <button type="button" className="secondary-btn" onClick={handleSelectOutputDir}>
+                                选择目录
+                            </button>
+                        </div>
+                    </label>
+
+                    <label className="field-block">
+                        <span>每段视频时长（秒）</span>
+                        <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={form.segmentLengthSec}
+                            onChange={(event) =>
+                                setForm((current) => ({
+                                    ...current,
+                                    segmentLengthSec: event.target.value,
+                                }))
+                            }
+                        />
+                    </label>
+
+                    <div className="tips-panel">
+                        <div>输出文件命名规则：原文件名 + `_part_001.mp4`</div>
+                        <div>适合快速批量拆分长视频素材，直接用于短视频二次处理。</div>
                     </div>
-                </div>
+
+                    <button type="submit" className="primary-btn" disabled={isSubmitting || !environment.ffmpegReady}>
+                        {isSubmitting ? "正在切割，请稍候..." : "开始切割"}
+                    </button>
+
+                    {errorMessage ? <div className="message error">{errorMessage}</div> : null}
+
+                    {result ? (
+                        <div className="message success">
+                            <strong>切割完成</strong>
+                            <span>共生成 {result.segmentCount} 个短视频</span>
+                            <span>保存目录：{result.outputDir}</span>
+                        </div>
+                    ) : null}
+                </form>
             </section>
 
-            <section className="content-grid">
-                <div className="panel">
-                    <div className="panel-title">开发起点</div>
-                    <div className="feature-list">
-                        {featureCards.map((item) => (
-                            <article className="feature-card" key={item.title}>
-                                <h2>{item.title}</h2>
-                                <p>{item.text}</p>
-                            </article>
-                        ))}
+            <section className="results-layout">
+                <article className="panel">
+                    <div className="section-heading">
+                        <span>处理结果</span>
+                        <strong>生成文件</strong>
                     </div>
-                </div>
+                    {result?.generatedFiles?.length ? (
+                        <div className="file-list">
+                            {result.generatedFiles.map((filePath) => (
+                                <div className="file-item" key={filePath}>
+                                    {filePath}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="empty-state">切割完成后，这里会显示生成出来的短视频文件列表。</div>
+                    )}
+                </article>
 
-                <div className="panel side-panel">
-                    <div className="panel-title">下一步建议</div>
-                    <ol className="step-list">
-                        {quickSteps.map((step) => (
-                            <li key={step}>{step}</li>
-                        ))}
-                    </ol>
-
-                    <div className="mini-metrics">
-                        <div className="metric-card">
-                            <strong>UI</strong>
-                            <span>React + Vite</span>
-                        </div>
-                        <div className="metric-card">
-                            <strong>Runtime</strong>
-                            <span>Wails Desktop</span>
-                        </div>
-                        <div className="metric-card">
-                            <strong>Backend</strong>
-                            <span>Go Service Bridge</span>
-                        </div>
+                <article className="panel">
+                    <div className="section-heading">
+                        <span>使用说明</span>
+                        <strong>最快上手</strong>
                     </div>
-                </div>
+                    <div className="instruction-list">
+                        <div className="instruction-item">1. 点击“选择视频”，挑选要拆分的原视频。</div>
+                        <div className="instruction-item">2. 点击“选择目录”，指定短视频的输出位置。</div>
+                        <div className="instruction-item">3. 输入每段时长，例如 `15`、`30`、`60` 秒。</div>
+                        <div className="instruction-item">4. 点击“开始切割”，等待生成完成。</div>
+                    </div>
+
+                    <div className="ffmpeg-path">
+                        <span>当前 ffmpeg 路径</span>
+                        <code>{environment.ffmpegPath || "未检测到"}</code>
+                    </div>
+                </article>
             </section>
         </main>
     );
